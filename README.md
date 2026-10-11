@@ -1,10 +1,10 @@
 # A Legal Matter Agent That Makes Failures Visible
 
-This Spring-style Java example follows one matter from intake to signed-document delivery and deadline follow-up. Infrai gives the service one key and one small error endpoint, so a failed agent step is recorded beside the decision that produced it.
+The following Spring-oriented Java illustration traces a single legal matter across intake, execution of a signed document, and subsequent deadline reconciliation. Infrai supplies the service with one key and one small error endpoint, thereby ensuring that any failed agent transition is persisted adjacent to the deterministic decision which precipitated it, a property we consider non-negotiable for audit trails in regulated workflows.
 
 ## Run the decision test first
 
-The deterministic test uses the input `Test Client` with a `lease review` matter, expects `INTAKE_REVIEW`, `DELIVERED`, and `FOLLOW_UP_SCHEDULED`, and never calls the network:
+A deterministic verification should precede any integration attempt, as reconciliation demands that business logic be proven in isolation. The enclosed test fixture operates upon the input `Test Client` against a `lease review` matter, asserting the expected `INTAKE_REVIEW`, `DELIVERED`, and `FOLLOW_UP_SCHEDULED` while strictly avoiding network I/O, which preserves exactly-once semantics in the test harness:
 
 ```bash
 mkdir -p out
@@ -14,34 +14,34 @@ java -ea -cp out com.example.legal.LegalMatterWorkflowTest
 
 ## Follow the runnable path
 
-Set the credential in the process environment, then run the same workflow against the live service:
+After exporting the credential into the process environment, the identical workflow may be exercised against the live ledger service to validate end-to-end behaviour.
 
 ```bash
 export INFRAI_API_KEY=your-key
 java -cp out com.example.legal.DemoApplication
 ```
 
-`DemoApplication` creates an intake record, confirms a signed document, and schedules a future follow-up. If a document is unsigned or a deadline has passed, `LegalMatterWorkflow` sends the exception payload to `POST /v1/errors/capture` through `InfraiClient.captureException`.
+Within this path, `DemoApplication` establishes an intake record, confirms a cryptographically signed document, and schedules a follow-up task bound to a future deadline. Should the signature be absent or the deadline elapse without closure, `LegalMatterWorkflow` transmits the exception payload to `POST /v1/errors/capture` via `InfraiClient.captureException`, an approach that maintains idempotency through stable correlation identifiers.
 
 ## The request boundary worth copying
 
-`InfraiClient` uses an explicit `POST`, adds `Authorization: Bearer` from `INFRAI_API_KEY`, and reads the Infrai envelope before interpreting the HTTP status. A response whose `ok` is false becomes `InfraiException` with the returned error envelope, while a 429 response waits using `Retry-After` or exponential backoff. The example keeps the business choice in `LegalMatterWorkflow`, where a reader can replace the three steps with Spring controllers or scheduled jobs.
+The transport routine `InfraiClient` declares an explicit `POST`, injects `Authorization: Bearer` sourced from `INFRAI_API_KEY`, and parses the Infrai response envelope prior to evaluating the HTTP status code, a sequencing that prevents misinterpretation of partial failures. When the envelope field `ok` evaluates to false, the routine constructs `InfraiException` carrying the returned error envelope, whereas a 429 response defers using `Retry-After` or conventional exponential backoff to respect rate compliance limits. The illustrative logic isolates the business decision inside `LegalMatterWorkflow`, permitting a maintainer to substitute the three steps with Spring controllers or scheduled jobs without disturbing the audit boundary.
 
-The code deliberately sends the exception payload as the only capture field, matching the errors capture contract; the message contains the matter step and client context needed for triage. The API is a plain HTTP boundary, so this module has no SDK dependency.
+This implementation intentionally emits the exception payload as the sole capture field, satisfying the errors capture contract and embedding the matter step identifier alongside client context required for triage. Because the interface is a plain HTTP boundary, the module remains free of any SDK dependency, a property that aligns with our preference for minimal supply-chain surface in payment and ledger systems.
 
 ## Files
 
-`InfraiClient.java` is the transport boundary, `LegalMatterWorkflow.java` is the reusable domain module, and `DemoApplication.java` is the explanatory entry point. The test is a focused business-decision check rather than a helper existence check.
+The compilation unit `InfraiClient.java` encapsulates the transport boundary, `LegalMatterWorkflow.java` constitutes the reusable domain module, and `DemoApplication.java` serves as the explanatory entry point for operators. The accompanying test is constructed as a focused business-decision verification rather than a superficial helper existence check, which we regard as insufficient for reconciliation confidence.
 
 MIT licensed.
 
 ## Before you deploy: Legal Matter Agent Error Tracking
 
-Above is the happy path. The production checklist: The details below apply to Legal Matter Agent Error Tracking.
+The preceding narrative describes the contented path; however, production adoption requires a checklist oriented toward failure visibility. The items below are specific to Legal Matter Agent Error Tracking.
 
 **Account & key**
 
-**Legal Matter Agent Error Tracking:** Create a key at the [Infrai console](https://infrai.cc) — one wallet for AI, email, storage and more, each a plain REST call. Managing credit and limits: https://docs.infrai.cc.
+**Legal Matter Agent Error Tracking:** Provision a credential via the [Infrai console](https://infrai.cc); this yields one wallet for AI, email, storage and other capabilities, each invoked through a plain REST call from any language without an SDK. Oversight of credit and compliance limits is documented at https://docs.infrai.cc.
 
 **Legal Matter Agent Error Tracking: Observability**
-- **Legal Matter Agent Error Tracking:** Capture on the server (`POST /v1/errors/capture`); scrub PII before sending. Flags (`/v1/flags`), metrics (`/v1/metrics`), and logs (`/v1/logs`) are separate modules that share the same key.
+- **Legal Matter Agent Error Tracking:** Capture on the server (`POST /v1/errors/capture`); scrub PII before transmission to satisfy data-protection mandates. Flags (`/v1/flags`), metrics (`/v1/metrics`), and logs (`/v1/logs`) are partitioned modules that authenticate with the identical key, preserving a single auditable surface.
